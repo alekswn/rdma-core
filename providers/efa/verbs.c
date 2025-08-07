@@ -25,6 +25,25 @@
 #include "verbs.h"
 #include "efa_trace.h"
 
+static struct timespec program_start_time;
+static bool start_time_initialized = false;
+
+static void get_relative_time(struct timespec *rel_ts)
+{
+	struct timespec current_ts;
+	if (!start_time_initialized) {
+		clock_gettime(CLOCK_REALTIME, &program_start_time);
+		start_time_initialized = true;
+	}
+	clock_gettime(CLOCK_REALTIME, &current_ts);
+	rel_ts->tv_sec = current_ts.tv_sec - program_start_time.tv_sec;
+	rel_ts->tv_nsec = current_ts.tv_nsec - program_start_time.tv_nsec;
+	if (rel_ts->tv_nsec < 0) {
+		rel_ts->tv_sec--;
+		rel_ts->tv_nsec += 1000000000L;
+	}
+}
+
 #define EFA_DEV_CAP(ctx, cap) \
 	((ctx)->device_caps & EFA_QUERY_DEVICE_CAPS_##cap)
 
@@ -815,7 +834,7 @@ static inline int efa_poll_sub_cq(struct efa_cq *cq, struct efa_sub_cq *sub_cq,
 	}
 
 	qpn = cq->cur_cqe->qp_num;
-	clock_gettime(CLOCK_REALTIME, &ts);
+	get_relative_time(&ts);
 	fprintf(stderr, "[%ld.%09ld] [DEBUG] efa_poll_sub_cq: got CQE for QP %u, status=%u\n", ts.tv_sec, ts.tv_nsec, qpn, cq->cur_cqe->status);
 
 	if (!*cur_qp || qpn != (*cur_qp)->verbs_qp.qp.qp_num) {
@@ -1014,7 +1033,7 @@ static struct ibv_cq_ex *create_cq(struct ibv_context *ibvctx,
 	int err;
 	int i;
 
-	clock_gettime(CLOCK_REALTIME, &ts);
+	get_relative_time(&ts);
 	fprintf(stderr, "[%ld.%09ld] [DEBUG] create_cq: entering, requested cqe=%d\n", ts.tv_sec, ts.tv_nsec, attr->cqe);
 
 	if (!check_comp_mask(attr->comp_mask, IBV_CQ_INIT_ATTR_MASK_PD) ||
