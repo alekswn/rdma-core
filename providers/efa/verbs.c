@@ -808,6 +808,7 @@ static inline int efa_poll_sub_cq(struct efa_cq *cq, struct efa_sub_cq *sub_cq,
 	struct timespec ts;
 	uint32_t qpn;
 
+	entry_count++;
 	cq->cur_cqe = cq_next_sub_cqe_get(sub_cq);
 	if (!cq->cur_cqe) {
 		return ENOENT;
@@ -846,7 +847,7 @@ static inline int efa_poll_sub_cq(struct efa_cq *cq, struct efa_sub_cq *sub_cq,
 			efa_wq_put_wrid_idx_unlocked(cq->cur_wq, cq->cur_cqe->req_id);
 	}
 
-	fprintf(stderr, "[%ld.%09ld] [DEBUG] efa_poll_sub_cq: completed successfully after %d entries\n", ts.tv_sec, ts.tv_nsec, entry_count);
+	fprintf(stderr, "[%ld.%09ld] [DEBUG] efa_poll_sub_cq: completed successfully after %d polls\n", ts.tv_sec, ts.tv_nsec, entry_count);
 	entry_count = 0;
 	return 0;
 }
