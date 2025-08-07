@@ -805,12 +805,19 @@ static inline int efa_poll_sub_cq(struct efa_cq *cq, struct efa_sub_cq *sub_cq,
 	struct efa_context *ctx = to_efa_context(cq->verbs_cq.cq.context);
 	uint32_t qpn;
 
+	printf("[DEBUG] efa_poll_sub_cq: entering, extended=%d\n", extended);
+
 	cq->cur_cqe = cq_next_sub_cqe_get(sub_cq);
-	if (!cq->cur_cqe)
+	if (!cq->cur_cqe) {
+		printf("[DEBUG] efa_poll_sub_cq: no CQE available, returning ENOENT\n");
 		return ENOENT;
+	}
 
 	qpn = cq->cur_cqe->qp_num;
+	printf("[DEBUG] efa_poll_sub_cq: got CQE for QP %u, status=%u\n", qpn, cq->cur_cqe->status);
+
 	if (!*cur_qp || qpn != (*cur_qp)->verbs_qp.qp.qp_num) {
+		printf("[DEBUG] efa_poll_sub_cq: looking up QP %u in table\n", qpn);
 		/* We do not have to take the QP table lock here,
 		 * because CQs will be locked while QPs are removed
 		 * from the table.
@@ -818,21 +825,26 @@ static inline int efa_poll_sub_cq(struct efa_cq *cq, struct efa_sub_cq *sub_cq,
 		*cur_qp = ctx->qp_table[qpn & ctx->qp_table_sz_m1];
 		if (!*cur_qp) {
 			cq->cur_wq = NULL;
+			printf("[DEBUG] efa_poll_sub_cq: QP %u not found in table\n", qpn);
 			verbs_err(&ctx->ibvctx,
 				  "QP[%u] does not exist in QP table\n",
 				  qpn);
 			return EINVAL;
 		}
+		printf("[DEBUG] efa_poll_sub_cq: found QP %u in table\n", qpn);
 	}
 
 	if (extended) {
+		printf("[DEBUG] efa_poll_sub_cq: processing extended CQE\n");
 		efa_process_ex_cqe(cq, *cur_qp);
 	} else {
+		printf("[DEBUG] efa_poll_sub_cq: processing regular CQE\n");
 		efa_process_cqe(cq, wc, *cur_qp);
 		if (cq->cur_wq)
 			efa_wq_put_wrid_idx_unlocked(cq->cur_wq, cq->cur_cqe->req_id);
 	}
 
+	printf("[DEBUG] efa_poll_sub_cq: completed successfully\n");
 	return 0;
 }
 
@@ -997,6 +1009,8 @@ static struct ibv_cq_ex *create_cq(struct ibv_context *ibvctx,
 	int err;
 	int i;
 
+	printf("[DEBUG] create_cq: entering, requested cqe=%d\n", attr->cqe);
+
 	if (!check_comp_mask(attr->comp_mask, IBV_CQ_INIT_ATTR_MASK_PD) ||
 	    !check_comp_mask(attr->wc_flags, IBV_WC_STANDARD_FLAGS)) {
 		verbs_err(verbs_get_ctx(ibvctx),
@@ -1024,8 +1038,11 @@ static struct ibv_cq_ex *create_cq(struct ibv_context *ibvctx,
 
 	cq = calloc(1, sizeof(*cq) +
 		       sizeof(*cq->sub_cq_arr) * ctx->sub_cqs_per_cq);
-	if (!cq)
+	if (!cq) {
+		printf("[DEBUG] create_cq: failed to allocate CQ memory\n");
 		return NULL;
+	}
+	printf("[DEBUG] create_cq: allocated CQ memory\n");
 
 	if (efa_attr->wc_flags & EFADV_WC_EX_WITH_SGID)
 		cmd.flags |= EFA_CREATE_CQ_WITH_SGID;
@@ -1045,13 +1062,16 @@ static struct ibv_cq_ex *create_cq(struct ibv_context *ibvctx,
 		cmd.flags |= EFA_CREATE_CQ_WITH_COMPLETION_CHANNEL;
 
 	attr->cqe = roundup_pow_of_two(attr->cqe);
+	printf("[DEBUG] create_cq: rounded cqe=%d, num_sub_cqs=%d\n", attr->cqe, num_sub_cqs);
 	err = ibv_cmd_create_cq_ex(ibvctx, attr, &prov_attr, &cq->verbs_cq,
 				   &cmd.ibv_cmd, sizeof(cmd),
 				   &resp.ibv_resp, sizeof(resp), cmd_flags);
 	if (err) {
+		printf("[DEBUG] create_cq: ibv_cmd_create_cq_ex failed with err=%d\n", err);
 		errno = err;
 		goto err_free_cq;
 	}
+	printf("[DEBUG] create_cq: ibv_cmd_create_cq_ex succeeded\n");
 
 	sub_cq_size = cq->verbs_cq.cq.cqe;
 	cq->cqn = resp.cq_idx;
@@ -1097,14 +1117,18 @@ static struct ibv_cq_ex *create_cq(struct ibv_context *ibvctx,
 	if (cq->parent_domain)
 		atomic_fetch_add(&cq->parent_domain->refcount, 1);
 
+	printf("[DEBUG] create_cq: CQ created successfully, cqn=%d\n", cq->cqn);
 	return &cq->verbs_cq.cq_ex;
 
 err_unmap_cq:
+	printf("[DEBUG] create_cq: error unmapping CQ\n");
 	if (cq->buf_mmaped)
 		munmap(cq->buf, cq->buf_size);
 err_destroy_cq:
+	printf("[DEBUG] create_cq: error destroying CQ\n");
 	ibv_cmd_destroy_cq(&cq->verbs_cq.cq);
 err_free_cq:
+	printf("[DEBUG] create_cq: error freeing CQ\n");
 	free(cq);
 	verbs_err(verbs_get_ctx(ibvctx), "Failed to create CQ\n");
 	return NULL;
