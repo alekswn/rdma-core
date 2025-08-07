@@ -832,9 +832,9 @@ static inline int efa_poll_sub_cq(struct efa_cq *cq, struct efa_sub_cq *sub_cq,
 
 	cq->cur_cqe = cq_next_sub_cqe_get(sub_cq);
 	if (!cq->cur_cqe) {
-		if (entry_count % 1000) {
+		if (entry_count % 10000) {
 			get_relative_time(&ts);
-			fprintf(stderr, "[%ld.%09ld] [DEBUG] efa_poll_sub_cq: polling for CQE, total cq count is %d\n", ts.tv_sec, ts.tv_nsec, cq_count);
+			fprintf(stderr, "[%ld.%09ld] [DEBUG] efa_poll_sub_cq: polling for CQE, poll count is %d, total cq count is %d\n", ts.tv_sec, ts.tv_nsec, entry_count, cq_count);
 		}
 		return ENOENT;
 	}
