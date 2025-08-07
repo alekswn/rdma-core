@@ -807,7 +807,6 @@ static inline int efa_poll_sub_cq(struct efa_cq *cq, struct efa_sub_cq *sub_cq,
 	struct efa_context *ctx = to_efa_context(cq->verbs_cq.cq.context);
 	struct timespec ts;
 	uint32_t qpn;
-	bool has_logging = false;
 
 	cq->cur_cqe = cq_next_sub_cqe_get(sub_cq);
 	if (!cq->cur_cqe) {
@@ -816,7 +815,6 @@ static inline int efa_poll_sub_cq(struct efa_cq *cq, struct efa_sub_cq *sub_cq,
 
 	qpn = cq->cur_cqe->qp_num;
 	clock_gettime(CLOCK_REALTIME, &ts);
-	has_logging = true;
 	fprintf(stderr, "[%ld.%09ld] [DEBUG] efa_poll_sub_cq: got CQE for QP %u, status=%u\n", ts.tv_sec, ts.tv_nsec, qpn, cq->cur_cqe->status);
 
 	if (!*cur_qp || qpn != (*cur_qp)->verbs_qp.qp.qp_num) {
@@ -996,7 +994,7 @@ static void efa_sub_cq_initialize(struct efa_sub_cq *sub_cq, uint8_t *buf,
 
 static struct ibv_cq_ex *create_cq(struct ibv_context *ibvctx,
 				   struct ibv_cq_init_attr_ex *attr,
-				   struct efladv_cq_init_attr *efa_attr)
+				   struct efadv_cq_init_attr *efa_attr)
 {
 	struct efa_context *ctx = to_efa_context(ibvctx);
 	struct verbs_create_cq_prov_attr prov_attr = {};
@@ -1014,10 +1012,8 @@ static struct ibv_cq_ex *create_cq(struct ibv_context *ibvctx,
 	struct timespec ts;
 	int err;
 	int i;
-	bool has_logging = false;
 
 	clock_gettime(CLOCK_REALTIME, &ts);
-	has_logging = true;
 	fprintf(stderr, "[%ld.%09ld] [DEBUG] create_cq: entering, requested cqe=%d\n", ts.tv_sec, ts.tv_nsec, attr->cqe);
 
 	if (!check_comp_mask(attr->comp_mask, IBV_CQ_INIT_ATTR_MASK_PD) ||
@@ -1130,16 +1126,13 @@ static struct ibv_cq_ex *create_cq(struct ibv_context *ibvctx,
 	return &cq->verbs_cq.cq_ex;
 
 err_unmap_cq:
-	if (has_logging)
 		fprintf(stderr, "[%ld.%09ld] [DEBUG] create_cq: error unmapping CQ\n", ts.tv_sec, ts.tv_nsec);
 	if (cq->buf_mmaped)
 		munmap(cq->buf, cq->buf_size);
 err_destroy_cq:
-	if (has_logging)
 		fprintf(stderr, "[%ld.%09ld] [DEBUG] create_cq: error destroying CQ\n", ts.tv_sec, ts.tv_nsec);
 	ibv_cmd_destroy_cq(&cq->verbs_cq.cq);
 err_free_cq:
-	if (has_logging)
 		fprintf(stderr, "[%ld.%09ld] [DEBUG] create_cq: error freeing CQ\n", ts.tv_sec, ts.tv_nsec);
 	free(cq);
 	verbs_err(verbs_get_ctx(ibvctx), "Failed to create CQ\n");
